@@ -1,0 +1,383 @@
+---
+title: "Inferential Statistics Course A.Y. 21/22"
+author: "Della Gatta Antonio"
+date: "21/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(FactoMineR) 
+library(GGally)
+library(factoextra) 
+library(summarytools)
+library(foreign)
+library(janitor)
+library(infer)
+
+```
+
+## COFNIDENCE INTERVAL SECOND MID TERM
+
+this dataset is from a study of serious suicide attempts over three years in a predominantly rural population in Shandong, China.
+
+One of the thing that could be interesting to make a study on is to notice the difference in proportion of people that have and that have not been Hospitalized.
+
+```{r}
+#https://vincentarelbundock.github.io/Rdatasets/csv/dplyr/starwars.csv
+#https://vincentarelbundock.github.io/Rdatasets/csv/AER/CigarettesB.csv
+#data$passengerClass =as.factor(data$passengerClass)
+
+
+
+data <- read.csv("https://vincentarelbundock.github.io/Rdatasets/csv/Stat2Data/SuicideChina.csv")
+
+
+
+View(data)
+
+```
+
+95% Confidence Interval for two proportions
+
+I have to build a 95% Interval estimate of the difference between the non-survived proportion of people hospitalized and the survivor proportion of people who have been Hospitalized. As a first step, I build a table of my data.
+
+```{r}
+data %>%
+  tabyl(Hospitalised, Died) %>% 
+  adorn_percentages() %>% 
+  adorn_pct_formatting() %>%
+  adorn_ns()
+```
+
+After that our aim is to understand if the difference in proportion is statistical significant. To evaluate this, I can use an interval estimate.
+
+The point estimate is not reliable so, by calculating the confidence interval, we can have a more wide range of value.
+
+I can use a bootstrap distribution that, basically, is a technique of sampling with replacement in order to obtain a simulated population from which my sample could have been potentially drawn.
+
+```{r}
+set.seed(2020)
+# I build the bootstrap distribution.
+
+bootstrap_distribution <- data %>% 
+  specify(formula = Hospitalised~ Died, success = "yes") %>% 
+  generate(reps = 10000, type= "bootstrap") %>% 
+  calculate(stat = "diff in props", order = c("yes", "no"))
+
+# visualize
+
+bootstrap_distribution %>% visualise(bins=20)
+
+```
+
+Our distribution is basically normally distributed so we can proceed with both methods:
+
+-   percentile method
+
+```{r}
+# percentile method
+
+percentile_ci_95=bootstrap_distribution %>% 
+  get_ci(level=0.95, type="percentile") 
+
+percentile_ci_95
+```
+
+```{r}
+# visualize the interval
+
+visualize(bootstrap_distribution)+
+  shade_confidence_interval(endpoints = percentile_ci_95 ,color = "violetred", fill = "blanchedalmond")+
+  geom_vline(xintercept = (-0.8321626	-0.7884611)/2, linetype = "dashed", color="violetred")
+```
+
+Looking at the bootstrap distribution for the used estimator with a shaded confidence interval, we can state that most values (95% of them) lie between -0.8321626 and -0.7884611.
+
+in different terms, if we constructed 100 confidence intervals for the same parameter with a confidence level of 95% we expect 95 of them to contain the true parameter.
+
+-   standard error
+
+```{r}
+# standard error method
+## compute the observed statistic
+
+obs_diff = data%>% 
+  specify(formula = Hospitalised~ Died, success = "yes") %>% 
+  calculate(stat = "diff in props", order = c("yes", "no"))
+
+obs_diff
+```
+
+```{r}
+## compute endpoints
+
+se_ci_95=bootstrap_distribution %>% 
+  get_ci(level=0.95, type="se", point_estimate = obs_diff) # in order to obtain the endpoints
+
+se_ci_95
+```
+
+```{r}
+## visualize the interval
+
+visualize(bootstrap_distribution)+
+  shade_confidence_interval(endpoints = se_ci_95 ,color = "red", fill = "blanchedalmond")+
+  geom_vline(xintercept = (-0.8321979	-0.7888212	)/2 , linetype = "dashed", color="violetred")
+```
+
+## the difference between the two proportions is statistically significant
+
+both the endpoint are below zero so the difference is greater than zero.
+
+################################################################################################## 
+
+#let's do the same process but with a confidence level of 90%
+
+The 95% confidence interval has a greater margin of error than a 90% confidence interval computed on the same sample. This happens because if we have a greater confidence level, also the critical value is higher and this makes the interval wider This 95% confidence interval would have a smaller margin of error then the 90% confidence interval?
+
+-   percentile method
+
+```{r}
+percentile_ci_90=bootstrap_distribution %>% 
+  get_ci(level=0.90, type="percentile") # in order to obtain the endpoints
+
+percentile_ci_90
+
+visualize(bootstrap_distribution)+
+  shade_confidence_interval(endpoints = percentile_ci_90 ,color = "red", fill = "blanchedalmond")+
+   geom_vline(xintercept = (-0.8287515	-0.7923015	)/2, linetype = "dashed", color="red")
+```
+
+-   standard error
+
+```{r}
+se_ci_90=bootstrap_distribution %>% 
+  get_ci(level=0.90, type="se", point_estimate = obs_diff) # in order to obtain the endpoints
+
+se_ci_90
+
+
+visualize(bootstrap_distribution)+
+  shade_confidence_interval(endpoints = se_ci_90 ,color = "red", fill = "blanchedalmond")+
+   geom_vline( xintercept= (-0.8287515	-0.7923015	)/2, linetype = "dashed", color="red")
+```
+
+The interval has never contained "0" so it is statistically significant.
+
+Now I compute the error bound for the percentile method.
+
+```{r}
+a=se_ci_90$lower_ci
+b=se_ci_90$upper_ci
+
+EBM_90 = (b-a)/2
+EBM_90
+
+```
+
+I compute the error bound, considering the 95% confidence interval.
+
+What is the error bound? it's basically the range of value below and above the sample statistic.
+
+```{r}
+c = se_ci_95$upper_ci
+d = se_ci_95$lower_ci
+
+EBM_95 = (c-d)/2
+EBM_95
+
+EBM_95-EBM_90
+```
+
+## the 95% confidence interval with a 0.018 error bound means that our statistic will be within those points of the real population value 95% of the time.
+
+if we will have a large sample size the margin of error will decrease but if we have a 95% level of confidence that will not change!
+
+also on a larger sample size we'll have that 95% of them will have the right parameter.
+
+############################################################################################### 
+
+## NOW LET'S TAKE A LOOK AT THE CONFIDENCE INTERVAL WITH MEAN'S DIFFERENCE
+
+## [**let's use another dataset in order to see another aspect of the confidence interval**]{.ul}
+
+The Star Wars API, or "swapi" (Swah-pee) is the world's first quantified and programmatically-accessible data source for all the data from the Star Wars canon universe.
+
+Here we can find a dataset from "swapi" with some descriptions and charateristics of the most important characters of the films.
+
+We can find informations about the species, the homebirth, some physical charateristics and so on.
+
+It could be interesting to see if the difference in mean of the height of masculine and the feminine is statistically significantly different from 0 with a confidence interval.
+
+```{r}
+data1 <- read.csv("https://vincentarelbundock.github.io/Rdatasets/csv/dplyr/starwars.csv")
+
+#remove some NA values
+data1<- data1[-c(28,37,40,80,82,83,84,85,86),]
+
+View(data1)
+```
+
+The estimator to use is the sample statistic d_hat, the difference between the two sample means.
+
+Let's show a summary table of our data:
+
+```{r}
+summ_tab = data1 %>%
+  group_by(gender) %>%
+  summarise(sample_size = n(),
+            mean = mean(`height`),
+            std_dev = sd(`height`),
+            minimum = min(`height`),
+            q1 = quantile(`height`, 0.25),
+            median = median(`height`),
+            q3 = quantile(`height`, 0.75),
+            maximum = max(`height`))
+summ_tab
+```
+
+Let's plot a boxplot of the height for each gender.
+
+```{r}
+data1 %>%
+  ggplot(aes(x = gender, y = `height`, fill = gender)) +
+  geom_boxplot() +
+  stat_summary(fun = mean, geom = "point", color = "red")
+```
+
+Let's generate the bootstrap distribution, which approximates the sampling distribution, and visualize it with a red vertical line corresponding to our estimate:
+
+```{r}
+set.seed(2021)
+boot_dist = data1 %>%
+  specify(formula = height ~ gender) %>%
+  generate(reps = 1000, type = "bootstrap") %>%
+  calculate(stat = "diff in means", order = c("masculine", "feminine"))
+
+visualize(boot_dist)
+```
+
+```{r}
+d_hat <- data1 %>% 
+  specify(height~ gender) %>% 
+  calculate(stat = "diff in means", 
+            order = c("masculine", "feminine"))
+d_hat
+```
+
+# Bell-shaped distribution, so we can use both percentile and standard error method
+
+we use the 99% level of confidences
+
+Percentile method:
+
+```{r}
+percentile_ci <- boot_dist %>% 
+  get_confidence_interval(level = 0.99, type = "percentile")
+percentile_ci
+```
+
+Visualize it:
+
+```{r}
+visualize(boot_dist) + 
+  shade_confidence_interval(endpoints = percentile_ci)+
+  geom_vline(xintercept = 11.82863	, linetype = "dashed")  
+```
+
+SE method
+
+```{r}
+standard_error_ci <- boot_dist %>% 
+  get_confidence_interval(type = "se", point_estimate = d_hat)
+standard_error_ci
+```
+
+```{r}
+visualize(boot_dist ) + 
+  shade_confidence_interval(endpoints = standard_error_ci)+
+  geom_vline(xintercept = ((-3.28961	+26.94687)/2), linetype = "dashed")
+```
+
+If we repeated our sampling procedure a large number of times, we expect about 99% of the resulting confidence intervals to capture the value of the population parameter.
+
+## let's do it with the 95% level of confidence
+
+```{r}
+data1 <- read.csv("https://vincentarelbundock.github.io/Rdatasets/csv/dplyr/starwars.csv")
+
+#remove some NA values
+data1<- data1[-c(28,37,40,80,82,83,84,85,86),]
+
+d_hat <- data1 %>% 
+  specify(height ~ gender) %>% 
+  calculate(stat = "diff in means", 
+            order = c("masculine", "feminine"))
+d_hat
+```
+
+compute the bootstrap distribution
+
+```{r}
+boot_distn_two_means <- data1 %>%
+  specify(height ~ gender) %>%
+  generate(reps = 10000, type = "bootstrap") %>%
+  calculate(
+    stat = "diff in means",
+    order = c("masculine", "feminine")
+  )
+
+```
+
+percentile method
+
+```{r}
+percentile_ci <- boot_distn_two_means %>% 
+  get_confidence_interval(level = 0.95, type = "percentile")
+percentile_ci
+
+visualize(boot_distn_two_means) + 
+  shade_confidence_interval(endpoints = percentile_ci)+
+  geom_vline(xintercept = 11.82863	, linetype = "dashed")  #d_hat is 11.82863	
+```
+
+SE method
+
+```{r}
+standard_error_ci <- boot_distn_two_means %>% 
+  get_confidence_interval(type = "se", point_estimate = d_hat)
+standard_error_ci
+
+visualize(boot_distn_two_means ) + 
+  shade_confidence_interval(endpoints = standard_error_ci)+
+  geom_vline(xintercept = 11.82863	, linetype = "dashed") 
+
+
+# larger sample size tend to produce narrower confidence interval.
+```
+
+Since the intervals obtained with both method contain the value 0 we can conclude that the difference in population means is not statistically significantly different from 0
+
+the higher the confidence interval the higher the margin of error.
+
+now we have constructed a 95% level of confidence interval and that basically means that if we have 100 confidence interval at least 95 of them contain the true parameter.
+
+## Let's image we want to construct a 68% confidence interval for the population parameter. What's happen?
+
+```{r}
+se_ci_68 = boot_distn_two_means %>%
+  get_ci(level = 0.68, type = "se", point_estimate = d_hat)
+se_ci_68
+
+boot_distn_two_means %>%
+  
+  visualise() +
+  shade_ci(se_ci_68, color = "hotpink", fill = "khaki") +
+  geom_vline(xintercept = 11.82863	,linetype = "dashed")
+```
+
+This time the value "0" i s not contained in the interval it means that the confidence interval is significant.
+
+But, in this case, we are less confident about our interval estimate.
